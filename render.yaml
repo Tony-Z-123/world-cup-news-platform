@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: worldcup2026-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: NEWS_API_KEY
+        sync: false        # Set this manually in the Render dashboard
+      - key: PYTHON_VERSION
+        value: 3.11.0
