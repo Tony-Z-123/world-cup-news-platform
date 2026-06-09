@@ -46,9 +46,12 @@ function App() {
         fontFamily: "Arial",
       }}
     >
-      <h1 style={{ textAlign: "center", marginBottom: "25px" }}>
-        ⚽ World Cup 2026
+      <h1 style={{ textAlign: "center", marginBottom: "8px" }}>
+        ⚽ Football Platform
       </h1>
+      <p style={{ textAlign: "center", color: "#666", marginBottom: "25px", fontSize: "15px" }}>
+        World Cup 2026 Matches &amp; Football News
+      </p>
 
       {error && (
         <p style={{ color: "red", textAlign: "center" }}>

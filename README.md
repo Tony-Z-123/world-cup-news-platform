@@ -1,34 +1,54 @@
-# ⚽ World Cup 2026
+# Football Platform
 
-A full-stack web application that displays FIFA World Cup 2026 match schedules, team badges, player rosters, and the latest football news.
+A full-stack football web application built with React and Flask. The current version focuses on **World Cup 2026 match schedules** and **live football news**, with plans to expand into a general-purpose football platform.
 
-![React](https://img.shields.io/badge/Frontend-React_19-61DAFB?logo=react)
-![Flask](https://img.shields.io/badge/Backend-Flask_3-000000?logo=flask)
-![Vite](https://img.shields.io/badge/Bundler-Vite_8-646CFF?logo=vite)
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.1-000000?logo=flask&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![Deployed on Vercel](https://img.shields.io/badge/Deployed-Vercel-000000?logo=vercel&logoColor=white)
+![Backend on Render](https://img.shields.io/badge/Backend-Render-46E3B7?logo=render&logoColor=white)
+
+---
+
+## Live Demo
+
+**Frontend:** [https://world-cup-news-platform.vercel.app](https://world-cup-news-platform.vercel.app)
+
+> The backend runs on Render's free tier and may take ~30 seconds to wake up on the first request.
+
+---
+
+## Overview
+
+Football Platform is a full-stack web app that aggregates football data from multiple APIs and presents it in a clean, card-based UI. Users can browse World Cup 2026 fixtures, view team badges, search by team name, explore player rosters, and read the latest football headlines — all in one place.
+
+The project is structured as a **monorepo** with a React frontend deployed on Vercel and a Flask REST API deployed on Render.
 
 ---
 
 ## Features
 
-- **World Cup 2026 Match Schedule** — Live match data pulled from TheSportsDB API
-- **Team Badges** — Home and away team badges displayed for every fixture
-- **Team Search** — Filter matches in real time by team name
-- **Player Rosters** — Look up players for any team via TheSportsDB
-- **Football News** — Latest football headlines powered by NewsAPI
-- **Responsive Layout** — Clean card-based UI built with React
+- **World Cup 2026 Fixtures** — Full match schedule with dates, venues, and group info
+- **Team Badges** — Home and away badges displayed on every fixture card
+- **Team Search** — Real-time client-side filtering by team name
+- **Player Rosters** — Browse up to 10 players per team via TheSportsDB
+- **Football News** — Latest English-language headlines powered by NewsAPI
+- **Responsive Layout** — Clean card-based design that works on all screen sizes
+- **Environment-based API URLs** — Frontend/backend connection fully configurable via env vars
 
 ---
 
 ## Tech Stack
 
-| Layer     | Technology                        |
-|-----------|-----------------------------------|
-| Frontend  | React 19, Vite 8                  |
-| Backend   | Python 3, Flask 3, Flask-CORS     |
-| Data      | TheSportsDB API (free tier)       |
-| News      | NewsAPI (`/v2/everything`)        |
-| Deploy    | Vercel (frontend) + Render (backend) |
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, Vite 8, plain CSS |
+| Backend | Python 3.11, Flask 3.1, Flask-CORS |
+| Match Data | [TheSportsDB API](https://www.thesportsdb.com) (free tier) |
+| News Data | [NewsAPI](https://newsapi.org) (`/v2/everything`) |
+| Frontend Deploy | [Vercel](https://vercel.com) |
+| Backend Deploy | [Render](https://render.com) |
 
 ---
 
@@ -37,25 +57,35 @@ A full-stack web application that displays FIFA World Cup 2026 match schedules, 
 ```
 football-news-platform/
 ├── backend/
-│   ├── app.py              # Flask API server
-│   ├── requirements.txt    # Python dependencies
-│   ├── .env.example        # Template for environment variables
-│   └── .env                # ← NOT committed (gitignored)
+│   ├── app.py               # Flask REST API (matches, news, players)
+│   ├── requirements.txt     # Python dependencies
+│   └── .env.example         # Environment variable template
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx         # Main React component
+│   │   ├── App.jsx          # Main React component
 │   │   ├── App.css
 │   │   ├── main.jsx
 │   │   └── index.css
+│   ├── public/
 │   ├── index.html
 │   ├── vite.config.js
 │   ├── package.json
-│   └── .env.example        # Template for frontend env vars
-├── render.yaml             # Render deployment config
-├── vercel.json             # Vercel deployment config
+│   ├── vercel.json          # Vercel deployment config
+│   └── .env.example         # Frontend environment variable template
+├── render.yaml              # Render deployment config
 ├── .gitignore
 └── README.md
 ```
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/` | All World Cup 2026 fixtures |
+| `GET` | `/news` | Latest football news articles |
+| `GET` | `/players/<team_id>` | Player roster for a given team |
 
 ---
 
@@ -65,9 +95,16 @@ football-news-platform/
 
 - Python 3.11+
 - Node.js 18+
-- A [NewsAPI](https://newsapi.org/) API key (free tier)
+- A free [NewsAPI](https://newsapi.org) key
 
-### Backend Setup
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/Tony-Z-123/world-cup-news-platform.git
+cd world-cup-news-platform
+```
+
+### 2. Set up the backend
 
 ```bash
 cd backend
@@ -82,102 +119,83 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Create your `.env` file from the template:
+Create your local `.env` file:
 
 ```bash
 cp .env.example .env
-# Then edit .env and add your real NEWS_API_KEY
+# Open .env and add your NEWS_API_KEY
 ```
 
 Start the Flask server:
 
 ```bash
 python app.py
+# Runs at http://127.0.0.1:5000
 ```
 
-The API runs at `http://127.0.0.1:5000`.
-
-### Frontend Setup
+### 3. Set up the frontend
 
 ```bash
 cd frontend
 npm install
 npm run dev
+# Runs at http://localhost:5173
 ```
-
-The app runs at `http://localhost:5173`.
-
----
-
-## API Endpoints
-
-| Method | Endpoint            | Description                              |
-|--------|---------------------|------------------------------------------|
-| GET    | `/`                 | Returns all World Cup 2026 match fixtures |
-| GET    | `/news`             | Returns latest football news articles    |
-| GET    | `/players/<team_id>`| Returns up to 10 players for a team      |
-
----
-
-## External APIs
-
-### TheSportsDB
-- **URL**: `https://www.thesportsdb.com`
-- **Usage**: Match schedule, team badges, player data for World Cup 2026 (league ID `4429`, season `2026`)
-- **Key**: Free tier API key `123` — no signup required
-
-### NewsAPI
-- **URL**: `https://newsapi.org`
-- **Usage**: `/v2/everything?q=football` — latest English-language football headlines
-- **Key**: Requires a free API key stored in `backend/.env` as `NEWS_API_KEY`
-
----
-
-## Deployment
-
-### Backend → Render
-
-1. Push this repo to GitHub
-2. Go to [render.com](https://render.com) → **New Web Service**
-3. Connect your GitHub repo
-4. Render auto-detects `render.yaml` — confirm settings
-5. Add environment variable: `NEWS_API_KEY = <your key>`
-6. Deploy — your backend URL will be `https://<service>.onrender.com`
-
-### Frontend → Vercel
-
-1. Go to [vercel.com](https://vercel.com) → **New Project**
-2. Import your GitHub repo
-3. Set **Root Directory** to `frontend`
-4. Add environment variable: `VITE_API_URL = https://<your-render-service>.onrender.com`
-5. Deploy — Vercel auto-runs `npm run build`
-
-See [DEPLOYMENT.md](#deployment) section below for full step-by-step instructions.
 
 ---
 
 ## Environment Variables
 
-### Backend (`backend/.env`)
+### Backend — `backend/.env`
 
-| Variable       | Description                        | Required |
-|----------------|------------------------------------|----------|
-| `NEWS_API_KEY` | Your NewsAPI.org API key           | Yes      |
+```
+NEWS_API_KEY=YOUR_API_KEY_HERE
+```
 
-### Frontend (`frontend/.env.local`)
+Get a free key at [newsapi.org](https://newsapi.org).
 
-| Variable        | Description                              | Required       |
-|-----------------|------------------------------------------|----------------|
-| `VITE_API_URL`  | Full URL of the deployed Flask backend   | Production only |
+### Frontend — `frontend/.env.local`
+
+```
+VITE_API_URL=YOUR_BACKEND_URL
+```
+
+In local development this can be omitted — the app defaults to `http://127.0.0.1:5000`.
+In production, set this to your Render backend URL in the Vercel dashboard.
+
+> **Never commit `.env` or `.env.local` files.** Both are covered by `.gitignore`.
 
 ---
 
-## Security Notes
+## Deployment
 
-- `.env` is listed in `.gitignore` and is **never committed**
-- Use `.env.example` files as templates — they contain no real secrets
-- Set `NEWS_API_KEY` as a **Render environment variable** in the dashboard
-- Set `VITE_API_URL` as a **Vercel environment variable** in the dashboard
+| Service | Platform | Config file |
+|---|---|---|
+| Flask backend | [Render](https://render.com) | `render.yaml` |
+| React frontend | [Vercel](https://vercel.com) | `frontend/vercel.json` |
+
+**Render:** Connect the GitHub repo, set `NEWS_API_KEY` as an environment variable in the dashboard, and deploy. The `render.yaml` handles the rest.
+
+**Vercel:** Import the GitHub repo, set Root Directory to `frontend`, add `VITE_API_URL` pointing to your Render backend URL, and deploy.
+
+---
+
+## Future Improvements
+
+- [ ] Add live match scores and real-time updates
+- [ ] Add a dedicated team profile page with full squad and stats
+- [ ] Support multiple leagues beyond World Cup (Premier League, Champions League, etc.)
+- [ ] Add user authentication and favourite teams
+- [ ] Improve mobile layout and add dark mode
+- [ ] Add caching layer to reduce external API calls
+
+---
+
+## Author
+
+**Tony Z**
+- GitHub: [@Tony-Z-123](https://github.com/Tony-Z-123)
+- Project: [world-cup-news-platform](https://github.com/Tony-Z-123/world-cup-news-platform)
 
 ---
 
