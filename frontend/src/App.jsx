@@ -3,6 +3,56 @@ import { useEffect, useState } from "react";
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 const MATCHES_PER_PAGE = 10;
 
+function downloadICS(match) {
+  const { homeTeam, awayTeam, date, time, venue } = match;
+
+  if (!date) return;
+
+  const pad = (n) => String(n).padStart(2, "0");
+
+  const formatDT = (d) =>
+    `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
+    `T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+
+  // Strip timezone offset from TheSportsDB time string e.g. "19:00:00+00:00" → "19:00:00"
+  const cleanTime = time ? time.replace(/[+-]\d{2}:\d{2}$/, "").trim() : "12:00:00";
+
+  const startDate = new Date(`${date}T${cleanTime}Z`);
+  if (isNaN(startDate.getTime())) return;
+
+  const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000);
+
+  const uid = `${date}-${homeTeam.replace(/\s+/g, "")}-${awayTeam.replace(/\s+/g, "")}@footballplatform`;
+
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Football Platform//World Cup 2026//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${formatDT(new Date())}`,
+    `DTSTART:${formatDT(startDate)}`,
+    `DTEND:${formatDT(endDate)}`,
+    `SUMMARY:${homeTeam} vs ${awayTeam}`,
+    `LOCATION:${venue || ""}`,
+    "DESCRIPTION:FIFA World Cup 2026 Match",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ];
+
+  const blob = new Blob([lines.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${homeTeam}_vs_${awayTeam}.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function App() {
   const [matches, setMatches] = useState([]);
   const [news, setNews] = useState([]);
@@ -177,6 +227,21 @@ function App() {
               </div>
               <p>📅 {match.date}</p>
               <p>📍 {match.venue}</p>
+              <button
+                onClick={() => downloadICS(match)}
+                style={{
+                  marginTop: "8px",
+                  padding: "7px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid #c8e6c9",
+                  backgroundColor: "#f1f8f1",
+                  color: "#2e7d32",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                }}
+              >
+                📅 Add to Calendar
+              </button>
             </div>
           ))}
 
