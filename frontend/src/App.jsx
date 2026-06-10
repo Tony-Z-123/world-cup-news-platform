@@ -1,7 +1,39 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 const MATCHES_PER_PAGE = 10;
+
+/**
+ * Derives preview group standings (all zeros) from the match schedule.
+ * Returns the same shape as the /standings API so the same render path works.
+ */
+function buildPreviewStandings(matches) {
+  const groupMap = new Map(); // "Group A" → Map(teamName → crest)
+  for (const m of matches) {
+    if (!m.group) continue;
+    if (!groupMap.has(m.group)) groupMap.set(m.group, new Map());
+    const teamMap = groupMap.get(m.group);
+    if (m.homeTeam && !teamMap.has(m.homeTeam)) teamMap.set(m.homeTeam, m.homeBadge || "");
+    if (m.awayTeam && !teamMap.has(m.awayTeam)) teamMap.set(m.awayTeam, m.awayBadge || "");
+  }
+  return [...groupMap.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([groupLabel, teamMap]) => ({
+      group: groupLabel,
+      table: [...teamMap.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([name, crest], idx) => ({
+          position: idx + 1,
+          team: name,
+          crest,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          points: 0,
+        })),
+    }));
+}
 
 /**
  * Converts a UTC date + time string pair to the browser's local timezone.
@@ -156,6 +188,15 @@ function App() {
       });
   }, []);
 
+  // Use real standings when available; otherwise derive a zero-stats preview from matches.
+  // Wait until both fetches settle before deciding — avoids a flash of "no data".
+  const displayStandings = useMemo(() => {
+    if (standings.length > 0) return { data: standings, isPreview: false };
+    if (loadingStandings || loadingMatches) return { data: [], isPreview: false };
+    const preview = buildPreviewStandings(matches);
+    return { data: preview, isPreview: preview.length > 0 };
+  }, [standings, matches, loadingStandings, loadingMatches]);
+
   const filteredMatches = matches.filter((match) => {
     const home = match.homeTeam ?? "";
     const away = match.awayTeam ?? "";
@@ -260,9 +301,32 @@ function App() {
         .standings-table tr:last-child td { border-bottom: none; }
         .standings-table tr:nth-child(1) td,
         .standings-table tr:nth-child(2) td { background: #f0faf4; }
+        .standings-grid.preview .standings-table tr:nth-child(1) td,
+        .standings-grid.preview .standings-table tr:nth-child(2) td { background: #fff; }
         .standings-table .pts { font-weight: 700; color: #1a6b3a; }
         .team-cell { display: flex; align-items: center; gap: 8px; }
         .team-crest { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
+        .preview-badge {
+          display: inline-block;
+          background: rgba(255,255,255,0.22);
+          border: 1px solid rgba(255,255,255,0.45);
+          color: #fff;
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.7px;
+          text-transform: uppercase;
+          padding: 2px 7px;
+          border-radius: 999px;
+          margin-left: 8px;
+          vertical-align: middle;
+        }
+        .preview-note {
+          text-align: center;
+          font-size: 12px;
+          color: #888;
+          font-style: italic;
+          margin: -16px 0 40px;
+        }
 
         /* ── Favorites ── */
         .favorites-card {
@@ -495,56 +559,69 @@ function App() {
       {/* ── Group Standings ── */}
       <h2 style={{ marginBottom: "16px" }}>🏆 Group Standings</h2>
 
-      {loadingStandings ? (
+      {(loadingStandings || (standings.length === 0 && loadingMatches)) ? (
         <div className="standings-grid">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="skeleton" style={{ height: "200px", borderRadius: "15px" }} />
           ))}
         </div>
-      ) : standings.length === 0 ? (
+      ) : displayStandings.data.length === 0 ? (
         <p style={{ color: "#888", marginBottom: "40px" }}>
           Standings are not available yet — they will appear once the group stage begins.
         </p>
       ) : (
-        <div className="standings-grid">
-          {standings.map((group) => (
-            <div key={group.group} className="standings-card">
-              <div className="standings-card-header">{group.group}</div>
-              <table className="standings-table">
-                <thead>
-                  <tr>
-                    <th>#&nbsp;&nbsp;Team</th>
-                    <th title="Played">P</th>
-                    <th title="Won">W</th>
-                    <th title="Drawn">D</th>
-                    <th title="Lost">L</th>
-                    <th title="Points">Pts</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.table.map((row) => (
-                    <tr key={row.position}>
-                      <td>
-                        <span className="team-cell">
-                          <span style={{ color: "#999", minWidth: "14px" }}>{row.position}</span>
-                          {row.crest && (
-                            <img src={row.crest} alt={row.team} className="team-crest" />
-                          )}
-                          {row.team}
-                        </span>
-                      </td>
-                      <td>{row.played}</td>
-                      <td>{row.won}</td>
-                      <td>{row.drawn}</td>
-                      <td>{row.lost}</td>
-                      <td className="pts">{row.points}</td>
+        <>
+          <div className={`standings-grid${displayStandings.isPreview ? " preview" : ""}`}>
+            {displayStandings.data.map((group) => (
+              <div key={group.group} className="standings-card">
+                <div className="standings-card-header">
+                  {group.group}
+                  {displayStandings.isPreview && (
+                    <span className="preview-badge">Preview</span>
+                  )}
+                </div>
+                <table className="standings-table">
+                  <thead>
+                    <tr>
+                      <th>#&nbsp;&nbsp;Team</th>
+                      <th title="Played">P</th>
+                      <th title="Won">W</th>
+                      <th title="Drawn">D</th>
+                      <th title="Lost">L</th>
+                      <th title="Points">Pts</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ))}
-        </div>
+                  </thead>
+                  <tbody>
+                    {group.table.map((row) => (
+                      <tr key={row.position}>
+                        <td>
+                          <span className="team-cell">
+                            <span style={{ color: "#999", minWidth: "14px" }}>{row.position}</span>
+                            {row.crest && (
+                              <img src={row.crest} alt={row.team} className="team-crest" />
+                            )}
+                            {row.team}
+                          </span>
+                        </td>
+                        <td>{row.played}</td>
+                        <td>{row.won}</td>
+                        <td>{row.drawn}</td>
+                        <td>{row.lost}</td>
+                        <td className="pts">{row.points}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+          {displayStandings.isPreview && (
+            <p className="preview-note">
+              Tournament has not started yet — standings are shown alphabetically with zero stats.
+              Live data will replace this automatically once matches begin.
+            </p>
+          )}
+        </>
       )}
 
       {/* ── Matches ── */}

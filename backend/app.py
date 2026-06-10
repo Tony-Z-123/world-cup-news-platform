@@ -41,6 +41,13 @@ def _fetch_from_football_data():
         venue_obj = m.get("venue") or ""
         area = m.get("area") or {}
 
+        # Normalise group label for group-stage matches only ("GROUP_A" → "Group A")
+        raw_group = m.get("group") or ""
+        if m.get("stage") == "GROUP_STAGE" and raw_group:
+            group_label = raw_group.replace("GROUP_", "Group ").replace("_", " ").title()
+        else:
+            group_label = ""
+
         matches.append({
             "date": date_part,
             "time": time_part,
@@ -51,6 +58,7 @@ def _fetch_from_football_data():
             "homeBadge": home.get("crest") or "",
             "awayBadge": away.get("crest") or "",
             "poster": "",
+            "group": group_label,
         })
 
     return matches
