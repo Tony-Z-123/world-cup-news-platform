@@ -3,8 +3,42 @@ import { useEffect, useState } from "react";
 const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 const MATCHES_PER_PAGE = 10;
 
+/**
+ * Converts a UTC date + time string pair to the browser's local timezone.
+ * Handles both "HH:MM" (football-data.org) and "HH:MM:SS+00:00" (TheSportsDB).
+ * Returns a formatted string like "Jun 11, 2026 • 7:00 PM", or "Time TBD".
+ */
+function formatLocalDateTime(date, time) {
+  if (!date) return "Time TBD";
+
+  // Strip any trailing timezone offset, e.g. "19:00:00+00:00" → "19:00:00"
+  const cleanTime = time ? time.replace(/[+-]\d{2}:\d{2}$/, "").trim() : null;
+
+  const isoString = cleanTime ? `${date}T${cleanTime}Z` : `${date}T00:00:00Z`;
+  const dt = new Date(isoString);
+  if (isNaN(dt.getTime())) return "Time TBD";
+
+  const datePart = dt.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+
+  if (!cleanTime) return datePart;
+
+  const timePart = dt.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  return `${datePart} • ${timePart}`;
+}
+
 function downloadICS(match) {
-  const { homeTeam, awayTeam, date, time, venue } = match;
+  const { date, time, venue } = match;
+  const homeTeam = match.homeTeam || "TBD";
+  const awayTeam = match.awayTeam || "TBD";
 
   if (!date) return;
 
@@ -56,10 +90,14 @@ function downloadICS(match) {
 function App() {
   const [matches, setMatches] = useState([]);
   const [news, setNews] = useState([]);
+  const [standings, setStandings] = useState([]);
+  const [bracket, setBracket] = useState([]);
   const [search, setSearch] = useState("");
   const [error, setError] = useState(null);
   const [loadingMatches, setLoadingMatches] = useState(true);
   const [loadingNews, setLoadingNews] = useState(true);
+  const [loadingStandings, setLoadingStandings] = useState(true);
+  const [loadingBracket, setLoadingBracket] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -89,6 +127,32 @@ function App() {
       .catch((err) => {
         setError(err.message);
         setLoadingNews(false);
+      });
+
+    fetch(`${API_URL}/standings`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Standings request failed: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        setStandings(Array.isArray(data) ? data : []);
+        setLoadingStandings(false);
+      })
+      .catch(() => {
+        setLoadingStandings(false);
+      });
+
+    fetch(`${API_URL}/bracket`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Bracket request failed: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        setBracket(Array.isArray(data) ? data : []);
+        setLoadingBracket(false);
+      })
+      .catch(() => {
+        setLoadingBracket(false);
       });
   }, []);
 
@@ -152,6 +216,166 @@ function App() {
           color: #aaa;
           cursor: not-allowed;
         }
+        .standings-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+          gap: 20px;
+          margin-bottom: 40px;
+        }
+        .standings-card {
+          background: #fff;
+          border-radius: 15px;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+          overflow: hidden;
+        }
+        .standings-card-header {
+          background: #1a6b3a;
+          color: #fff;
+          padding: 10px 16px;
+          font-weight: bold;
+          font-size: 15px;
+          letter-spacing: 0.5px;
+        }
+        .standings-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+        }
+        .standings-table th {
+          background: #f5f5f5;
+          padding: 7px 10px;
+          text-align: center;
+          color: #555;
+          font-weight: 600;
+          border-bottom: 1px solid #eee;
+        }
+        .standings-table th:first-child { text-align: left; padding-left: 12px; }
+        .standings-table td {
+          padding: 8px 10px;
+          text-align: center;
+          border-bottom: 1px solid #f0f0f0;
+          color: #333;
+        }
+        .standings-table td:first-child { text-align: left; padding-left: 12px; }
+        .standings-table tr:last-child td { border-bottom: none; }
+        .standings-table tr:nth-child(1) td,
+        .standings-table tr:nth-child(2) td { background: #f0faf4; }
+        .standings-table .pts { font-weight: 700; color: #1a6b3a; }
+        .team-cell { display: flex; align-items: center; gap: 8px; }
+        .team-crest { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
+
+        /* ── Favorites ── */
+        .favorites-card {
+          background: #fff;
+          border-radius: 15px;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+          padding: 22px 26px 18px;
+          margin-bottom: 36px;
+        }
+        .favorites-title {
+          font-size: 16px;
+          font-weight: 700;
+          color: #1a3c6b;
+          margin: 0 0 18px;
+        }
+        .fav-row { margin-bottom: 13px; }
+        .fav-row:last-of-type { margin-bottom: 0; }
+        .fav-label {
+          display: flex;
+          justify-content: space-between;
+          font-size: 14px;
+          color: #333;
+          margin-bottom: 5px;
+        }
+        .fav-label span:last-child { font-weight: 700; color: #1a6b3a; }
+        .fav-bar-track {
+          background: #f0f0f0;
+          border-radius: 999px;
+          height: 10px;
+          overflow: hidden;
+        }
+        .fav-bar-fill {
+          height: 100%;
+          border-radius: 999px;
+          background: linear-gradient(90deg, #1a6b3a, #34a85a);
+          transition: width 0.6s ease;
+        }
+        .favorites-note {
+          margin-top: 14px;
+          font-size: 11px;
+          color: #aaa;
+          text-align: right;
+        }
+
+        /* ── Bracket ── */
+        .bracket-stage { margin-bottom: 32px; }
+        .bracket-stage-label {
+          display: inline-block;
+          background: #1a3c6b;
+          color: #fff;
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.8px;
+          text-transform: uppercase;
+          padding: 5px 14px;
+          border-radius: 20px;
+          margin-bottom: 14px;
+        }
+        .bracket-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+          gap: 12px;
+        }
+        .bracket-grid.single { grid-template-columns: 1fr; max-width: 480px; }
+        .bracket-match {
+          background: #fff;
+          border-radius: 12px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+          padding: 14px 18px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .bracket-teams {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+        .bracket-team {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          flex: 1;
+          font-size: 14px;
+          font-weight: 600;
+          color: #222;
+          min-width: 0;
+        }
+        .bracket-team.away { flex-direction: row-reverse; text-align: right; }
+        .bracket-team img { width: 26px; height: 26px; object-fit: contain; flex-shrink: 0; }
+        .bracket-score {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 18px;
+          font-weight: 800;
+          color: #1a3c6b;
+          flex-shrink: 0;
+        }
+        .bracket-score-divider { color: #bbb; font-weight: 400; }
+        .bracket-vs {
+          font-size: 12px;
+          font-weight: 600;
+          color: #aaa;
+          flex-shrink: 0;
+          padding: 0 4px;
+        }
+        .bracket-meta {
+          font-size: 12px;
+          color: #888;
+          text-align: center;
+        }
       `}</style>
 
       <h1 style={{ textAlign: "center", marginBottom: "8px" }}>
@@ -166,6 +390,31 @@ function App() {
           ⚠️ Could not load data: {error}
         </p>
       )}
+
+      {/* ── Tournament Favorites ── */}
+      <div className="favorites-card">
+        <p className="favorites-title">🏆 Favorites to Win World Cup 2026</p>
+        {[
+          { team: "Brazil",    pct: 18 },
+          { team: "France",    pct: 16 },
+          { team: "Spain",     pct: 13 },
+          { team: "Argentina", pct: 11 },
+          { team: "England",   pct: 10 },
+        ].map(({ team, pct }) => (
+          <div key={team} className="fav-row">
+            <div className="fav-label">
+              <span>{team}</span>
+              <span>{pct}%</span>
+            </div>
+            <div className="fav-bar-track">
+              <div className="fav-bar-fill" style={{ width: `${pct * 5}%` }} />
+            </div>
+          </div>
+        ))}
+        <p className="favorites-note">
+          Illustrative probabilities for demonstration purposes.
+        </p>
+      </div>
 
       <input
         type="text"
@@ -182,6 +431,123 @@ function App() {
         }}
       />
 
+      {/* ── Knockout Bracket ── */}
+      <h2 style={{ marginBottom: "16px" }}>⚡ Knockout Bracket</h2>
+
+      {loadingBracket ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "12px", marginBottom: "40px" }}>
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: "90px", borderRadius: "12px" }} />
+          ))}
+        </div>
+      ) : bracket.length === 0 ? (
+        <p style={{ color: "#888", marginBottom: "40px" }}>
+          Knockout bracket matches will appear here once the group stage is complete.
+        </p>
+      ) : (
+        <div style={{ marginBottom: "40px" }}>
+          {bracket.map((stageBlock) => {
+            const isSingle = ["SEMI_FINALS", "THIRD_PLACE", "FINAL"].includes(stageBlock.stageKey);
+            return (
+              <div key={stageBlock.stageKey} className="bracket-stage">
+                <div className="bracket-stage-label">{stageBlock.stage}</div>
+                <div className={`bracket-grid${isSingle ? " single" : ""}`}>
+                  {stageBlock.matches.map((m, i) => {
+                    const finished = m.status === "FINISHED";
+                    const home = m.homeTeam || "TBD";
+                    const away = m.awayTeam || "TBD";
+                    return (
+                      <div key={i} className="bracket-match">
+                        <div className="bracket-teams">
+                          <div className="bracket-team">
+                            {m.homeBadge && <img src={m.homeBadge} alt={home} />}
+                            <span>{home}</span>
+                          </div>
+
+                          {finished ? (
+                            <div className="bracket-score">
+                              <span>{m.homeScore ?? "–"}</span>
+                              <span className="bracket-score-divider">:</span>
+                              <span>{m.awayScore ?? "–"}</span>
+                            </div>
+                          ) : (
+                            <span className="bracket-vs">VS</span>
+                          )}
+
+                          <div className="bracket-team away">
+                            {m.awayBadge && <img src={m.awayBadge} alt={away} />}
+                            <span>{away}</span>
+                          </div>
+                        </div>
+                        <div className="bracket-meta">
+                          {formatLocalDateTime(m.date, m.time)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Group Standings ── */}
+      <h2 style={{ marginBottom: "16px" }}>🏆 Group Standings</h2>
+
+      {loadingStandings ? (
+        <div className="standings-grid">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: "200px", borderRadius: "15px" }} />
+          ))}
+        </div>
+      ) : standings.length === 0 ? (
+        <p style={{ color: "#888", marginBottom: "40px" }}>
+          Standings are not available yet — they will appear once the group stage begins.
+        </p>
+      ) : (
+        <div className="standings-grid">
+          {standings.map((group) => (
+            <div key={group.group} className="standings-card">
+              <div className="standings-card-header">{group.group}</div>
+              <table className="standings-table">
+                <thead>
+                  <tr>
+                    <th>#&nbsp;&nbsp;Team</th>
+                    <th title="Played">P</th>
+                    <th title="Won">W</th>
+                    <th title="Drawn">D</th>
+                    <th title="Lost">L</th>
+                    <th title="Points">Pts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.table.map((row) => (
+                    <tr key={row.position}>
+                      <td>
+                        <span className="team-cell">
+                          <span style={{ color: "#999", minWidth: "14px" }}>{row.position}</span>
+                          {row.crest && (
+                            <img src={row.crest} alt={row.team} className="team-crest" />
+                          )}
+                          {row.team}
+                        </span>
+                      </td>
+                      <td>{row.played}</td>
+                      <td>{row.won}</td>
+                      <td>{row.drawn}</td>
+                      <td>{row.lost}</td>
+                      <td className="pts">{row.points}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Matches ── */}
       {loadingMatches ? (
         <div>
           <p style={{ color: "#aaa", marginBottom: "16px" }}>Loading matches...</p>
@@ -219,14 +585,18 @@ function App() {
                   gap: "12px",
                 }}
               >
-                <img src={match.homeBadge} alt={match.homeTeam} width="40" />
-                <strong>{match.homeTeam}</strong>
+                {match.homeBadge && (
+                  <img src={match.homeBadge} alt={match.homeTeam || "TBD"} width="40" />
+                )}
+                <strong>{match.homeTeam || "TBD"}</strong>
                 <span>vs</span>
-                <strong>{match.awayTeam}</strong>
-                <img src={match.awayBadge} alt={match.awayTeam} width="40" />
+                <strong>{match.awayTeam || "TBD"}</strong>
+                {match.awayBadge && (
+                  <img src={match.awayBadge} alt={match.awayTeam || "TBD"} width="40" />
+                )}
               </div>
-              <p>📅 {match.date}</p>
-              <p>📍 {match.venue}</p>
+              <p>📅 {formatLocalDateTime(match.date, match.time)}</p>
+              <p>📍 {match.venue || "Venue TBD"}</p>
               <button
                 onClick={() => downloadICS(match)}
                 style={{

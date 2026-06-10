@@ -116,6 +116,124 @@ def news():
     return jsonify(articles)
 
 
+@app.route("/bracket")
+def bracket():
+    if not FOOTBALL_DATA_API_KEY:
+        return jsonify({"error": "FOOTBALL_DATA_API_KEY is not set"}), 500
+
+    headers = {"X-Auth-Token": FOOTBALL_DATA_API_KEY}
+    resp = requests.get(
+        "https://api.football-data.org/v4/competitions/WC/matches",
+        headers=headers,
+        timeout=10,
+    )
+
+    if resp.status_code != 200:
+        return jsonify({"error": f"football-data.org returned HTTP {resp.status_code}"}), 502
+
+    raw_matches = resp.json().get("matches", [])
+
+    STAGE_ORDER = {
+        "LAST_32":       0,
+        "LAST_16":       1,
+        "QUARTER_FINALS": 2,
+        "SEMI_FINALS":   3,
+        "THIRD_PLACE":   4,
+        "FINAL":         5,
+    }
+    STAGE_LABELS = {
+        "LAST_32":       "Round of 32",
+        "LAST_16":       "Round of 16",
+        "QUARTER_FINALS": "Quarter Finals",
+        "SEMI_FINALS":   "Semi Finals",
+        "THIRD_PLACE":   "Third Place Playoff",
+        "FINAL":         "Final",
+    }
+
+    stages = {}
+    for m in raw_matches:
+        stage = m.get("stage") or ""
+        if stage not in STAGE_ORDER:
+            continue  # skip group stage and unknowns
+
+        utc_date = m.get("utcDate") or ""
+        date_part = utc_date[:10] if utc_date else ""
+        time_part = utc_date[11:16] if len(utc_date) >= 16 else ""
+
+        home = m.get("homeTeam") or {}
+        away = m.get("awayTeam") or {}
+        score = m.get("score") or {}
+        ft   = score.get("fullTime") or {}
+
+        stages.setdefault(stage, []).append({
+            "date":      date_part,
+            "time":      time_part,
+            "homeTeam":  home.get("name") or home.get("shortName") or "",
+            "awayTeam":  away.get("name") or away.get("shortName") or "",
+            "homeBadge": home.get("crest") or "",
+            "awayBadge": away.get("crest") or "",
+            "homeScore": ft.get("home"),
+            "awayScore": ft.get("away"),
+            "status":    m.get("status") or "",
+        })
+
+    result = []
+    for key in sorted(stages, key=lambda s: STAGE_ORDER[s]):
+        result.append({
+            "stage":    STAGE_LABELS[key],
+            "stageKey": key,
+            "matches":  sorted(stages[key], key=lambda x: x["date"] or ""),
+        })
+
+    return jsonify(result)
+
+
+@app.route("/standings")
+def standings():
+    if not FOOTBALL_DATA_API_KEY:
+        return jsonify({"error": "FOOTBALL_DATA_API_KEY is not set"}), 500
+
+    headers = {"X-Auth-Token": FOOTBALL_DATA_API_KEY}
+    resp = requests.get(
+        "https://api.football-data.org/v4/competitions/WC/standings",
+        headers=headers,
+        timeout=10,
+    )
+
+    if resp.status_code != 200:
+        return jsonify({"error": f"football-data.org returned HTTP {resp.status_code}"}), 502
+
+    raw = resp.json().get("standings", [])
+
+    # Keep only the TOTAL standing type (not HOME / AWAY splits)
+    groups = []
+    for entry in raw:
+        if entry.get("type") != "TOTAL":
+            continue
+
+        raw_group = entry.get("group") or ""
+        # "GROUP_A" → "Group A", "GROUP_B" → "Group B", etc.
+        label = raw_group.replace("GROUP_", "Group ").replace("_", " ").title() if raw_group else "Group"
+
+        table = []
+        for row in entry.get("table", []):
+            team = row.get("team") or {}
+            table.append({
+                "position": row.get("position", 0),
+                "team":     team.get("name") or team.get("shortName") or "Unknown",
+                "crest":    team.get("crest") or "",
+                "played":   row.get("playedGames", 0),
+                "won":      row.get("won", 0),
+                "drawn":    row.get("draw", 0),
+                "lost":     row.get("lost", 0),
+                "points":   row.get("points", 0),
+            })
+
+        groups.append({"group": label, "table": table})
+
+    return jsonify(groups)
+
+
 @app.route("/players/<team_id>")
 def players(team_id):
     url = f"https://www.thesportsdb.com/api/v1/json/123/lookup_all_players.php?id={team_id}"
