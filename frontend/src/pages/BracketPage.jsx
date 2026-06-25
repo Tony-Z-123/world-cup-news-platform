@@ -2,13 +2,53 @@ import { formatLocalDateTime } from "../utils";
 
 const SINGLE_STAGE_KEYS = ["SEMI_FINALS", "THIRD_PLACE", "FINAL"];
 
+function TeamSlot({ name, badge, side }) {
+  const isEmpty = !name;
+  return (
+    <div
+      className={`bracket-team${side === "away" ? " away" : ""}`}
+      style={{ opacity: isEmpty ? 0.45 : 1 }}
+    >
+      {badge
+        ? <img src={badge} alt={name || "TBD"} />
+        : !isEmpty && (
+          <span style={{
+            width: 26, height: 26, borderRadius: "50%",
+            background: "#e8eaf0", display: "inline-block", flexShrink: 0,
+          }} />
+        )
+      }
+      <span style={{ fontStyle: isEmpty ? "italic" : "normal", color: isEmpty ? "#aaa" : "#222" }}>
+        {name || "TBD"}
+      </span>
+    </div>
+  );
+}
+
 export default function BracketPage({ bracket, loadingBracket }) {
+  const totalMatches = bracket.reduce((n, s) => n + s.matches.length, 0);
+  const determinedMatches = bracket.reduce(
+    (n, s) => n + s.matches.filter(m => m.homeTeam && m.awayTeam).length, 0
+  );
+
   return (
     <>
-      <h2 style={{ marginBottom: "16px" }}>⚡ Knockout Bracket</h2>
+      <h2 style={{ marginBottom: "6px" }}>⚡ Knockout Bracket</h2>
+
+      {!loadingBracket && bracket.length > 0 && (
+        <p style={{ color: "#888", fontSize: "13px", marginBottom: "20px" }}>
+          {determinedMatches} of {totalMatches} matchups confirmed
+          {determinedMatches < totalMatches && " — remaining slots fill as group stage concludes"}
+        </p>
+      )}
 
       {loadingBracket ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "12px", marginBottom: "40px" }}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+          gap: "12px",
+          marginBottom: "40px",
+        }}>
           {[...Array(4)].map((_, i) => (
             <div key={i} className="skeleton" style={{ height: "90px", borderRadius: "12px" }} />
           ))}
@@ -40,33 +80,43 @@ export default function BracketPage({ bracket, loadingBracket }) {
                 <div className={`bracket-grid${isSingle ? " single" : ""}`}>
                   {stageBlock.matches.map((m, i) => {
                     const finished = m.status === "FINISHED";
-                    const home = m.homeTeam || "TBD";
-                    const away = m.awayTeam || "TBD";
-                    return (
-                      <div key={i} className="bracket-match">
-                        <div className="bracket-teams">
-                          <div className="bracket-team">
-                            {m.homeBadge && <img src={m.homeBadge} alt={home} />}
-                            <span>{home}</span>
-                          </div>
+                    const live     = m.status === "IN_PLAY" || m.status === "PAUSED";
+                    const hasScore = finished || (live && m.homeScore != null);
 
-                          {finished ? (
+                    return (
+                      <div
+                        key={i}
+                        className="bracket-match"
+                        style={{
+                          borderLeft: finished
+                            ? "3px solid #1a6b3a"
+                            : live
+                            ? "3px solid #e65100"
+                            : "3px solid transparent",
+                        }}
+                      >
+                        <div className="bracket-teams">
+                          <TeamSlot name={m.homeTeam} badge={m.homeBadge} side="home" />
+
+                          {hasScore ? (
                             <div className="bracket-score">
                               <span>{m.homeScore ?? "–"}</span>
                               <span className="bracket-score-divider">:</span>
                               <span>{m.awayScore ?? "–"}</span>
                             </div>
                           ) : (
-                            <span className="bracket-vs">VS</span>
+                            <span className="bracket-vs">{live ? "🔴" : "VS"}</span>
                           )}
 
-                          <div className="bracket-team away">
-                            {m.awayBadge && <img src={m.awayBadge} alt={away} />}
-                            <span>{away}</span>
-                          </div>
+                          <TeamSlot name={m.awayTeam} badge={m.awayBadge} side="away" />
                         </div>
+
                         <div className="bracket-meta">
-                          {formatLocalDateTime(m.date, m.time)}
+                          {finished
+                            ? "✓ Finished"
+                            : live
+                            ? "🔴 Live"
+                            : formatLocalDateTime(m.date, m.time)}
                         </div>
                       </div>
                     );
