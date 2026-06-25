@@ -2,44 +2,76 @@ import { formatLocalDateTime } from "../utils";
 
 const SINGLE_STAGE_KEYS = ["SEMI_FINALS", "THIRD_PLACE", "FINAL"];
 
-function TeamSlot({ name, badge, side }) {
-  const isEmpty = !name;
+/** One team slot inside a bracket card. */
+function TeamSlot({ name, label, badge, confirmed, side }) {
+  const display = name || label || "TBD";
+  const isTbd   = !name && !label;
+
   return (
     <div
       className={`bracket-team${side === "away" ? " away" : ""}`}
-      style={{ opacity: isEmpty ? 0.45 : 1 }}
+      style={{ opacity: isTbd ? 0.35 : confirmed ? 1 : 0.75 }}
     >
-      {badge
-        ? <img src={badge} alt={name || "TBD"} />
-        : !isEmpty && (
-          <span style={{
-            width: 26, height: 26, borderRadius: "50%",
-            background: "#e8eaf0", display: "inline-block", flexShrink: 0,
-          }} />
-        )
-      }
-      <span style={{ fontStyle: isEmpty ? "italic" : "normal", color: isEmpty ? "#aaa" : "#222" }}>
-        {name || "TBD"}
+      {/* Badge: only show when team is confirmed */}
+      {badge && confirmed ? (
+        <img src={badge} alt={name} />
+      ) : confirmed ? (
+        <span style={{
+          width: 26, height: 26, borderRadius: "50%",
+          background: "#e8eaf0", display: "inline-block", flexShrink: 0,
+        }} />
+      ) : null}
+
+      <span style={{
+        fontStyle:  confirmed ? "normal" : "italic",
+        fontSize:   confirmed ? "14px" : "12px",
+        color:      confirmed ? "#222" : isTbd ? "#ccc" : "#888",
+        lineHeight: 1.3,
+      }}>
+        {display}
       </span>
     </div>
   );
 }
 
 export default function BracketPage({ bracket, loadingBracket }) {
-  const totalMatches = bracket.reduce((n, s) => n + s.matches.length, 0);
-  const determinedMatches = bracket.reduce(
-    (n, s) => n + s.matches.filter(m => m.homeTeam && m.awayTeam).length, 0
+  const totalSlots = bracket.reduce(
+    (n, s) => n + s.matches.length * 2, 0
   );
+  const confirmedSlots = bracket.reduce(
+    (n, s) => n + s.matches.filter(m => m.homeConfirmed).length
+                + s.matches.filter(m => m.awayConfirmed).length,
+    0
+  );
+  const hasPlaceholders = confirmedSlots < totalSlots;
 
   return (
     <>
       <h2 style={{ marginBottom: "6px" }}>⚡ Knockout Bracket</h2>
 
-      {!loadingBracket && bracket.length > 0 && (
-        <p style={{ color: "#888", fontSize: "13px", marginBottom: "20px" }}>
-          {determinedMatches} of {totalMatches} matchups confirmed
-          {determinedMatches < totalMatches && " — remaining slots fill as group stage concludes"}
-        </p>
+      {/* Preview Mode note */}
+      {!loadingBracket && bracket.length > 0 && hasPlaceholders && (
+        <div style={{
+          background: "#fffbea",
+          border: "1px solid #ffe082",
+          borderRadius: "10px",
+          padding: "10px 16px",
+          marginBottom: "20px",
+          fontSize: "13px",
+          color: "#795548",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+        }}>
+          <span style={{ fontSize: "16px" }}>🗓️</span>
+          <span>
+            <strong>Preview Mode</strong> — Knockout matchups are projected placeholders
+            until group-stage results are finalised.
+            {" "}<span style={{ opacity: 0.7 }}>
+              {confirmedSlots} of {totalSlots} team slots confirmed.
+            </span>
+          </span>
+        </div>
       )}
 
       {loadingBracket ? (
@@ -49,7 +81,7 @@ export default function BracketPage({ bracket, loadingBracket }) {
           gap: "12px",
           marginBottom: "40px",
         }}>
-          {[...Array(4)].map((_, i) => (
+          {[...Array(6)].map((_, i) => (
             <div key={i} className="skeleton" style={{ height: "90px", borderRadius: "12px" }} />
           ))}
         </div>
@@ -81,7 +113,9 @@ export default function BracketPage({ bracket, loadingBracket }) {
                   {stageBlock.matches.map((m, i) => {
                     const finished = m.status === "FINISHED";
                     const live     = m.status === "IN_PLAY" || m.status === "PAUSED";
-                    const hasScore = finished || (live && m.homeScore != null);
+                    const hasScore = (finished || live)
+                                  && m.homeScore != null
+                                  && m.awayScore != null;
 
                     return (
                       <div
@@ -95,8 +129,28 @@ export default function BracketPage({ bracket, loadingBracket }) {
                             : "3px solid transparent",
                         }}
                       >
+                        {/* Match number badge */}
+                        {m.matchNum && (
+                          <div style={{
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            color: "#aaa",
+                            letterSpacing: "0.5px",
+                            textTransform: "uppercase",
+                            marginBottom: "6px",
+                          }}>
+                            Match {m.matchNum}
+                          </div>
+                        )}
+
                         <div className="bracket-teams">
-                          <TeamSlot name={m.homeTeam} badge={m.homeBadge} side="home" />
+                          <TeamSlot
+                            name={m.homeTeam}
+                            label={m.homeLabel}
+                            badge={m.homeBadge}
+                            confirmed={m.homeConfirmed}
+                            side="home"
+                          />
 
                           {hasScore ? (
                             <div className="bracket-score">
@@ -105,10 +159,18 @@ export default function BracketPage({ bracket, loadingBracket }) {
                               <span>{m.awayScore ?? "–"}</span>
                             </div>
                           ) : (
-                            <span className="bracket-vs">{live ? "🔴" : "VS"}</span>
+                            <span className="bracket-vs">
+                              {live ? "🔴" : "VS"}
+                            </span>
                           )}
 
-                          <TeamSlot name={m.awayTeam} badge={m.awayBadge} side="away" />
+                          <TeamSlot
+                            name={m.awayTeam}
+                            label={m.awayLabel}
+                            badge={m.awayBadge}
+                            confirmed={m.awayConfirmed}
+                            side="away"
+                          />
                         </div>
 
                         <div className="bracket-meta">

@@ -92,7 +92,8 @@ export default function HomePage({ matches, news, loadingMatches, loadingNews })
           {paginatedMatches.map((match, index) => {
             const finished = match.status === "FINISHED";
             const live     = match.status === "IN_PLAY" || match.status === "PAUSED";
-            const hasScore = finished || (live && match.homeScore != null);
+            // Only render the scoreboard when both values are actual numbers (0 is valid)
+            const hasScore = (finished || live) && match.homeScore != null && match.awayScore != null;
             const home     = match.homeTeam || "TBD";
             const away     = match.awayTeam || "TBD";
 

@@ -23,21 +23,51 @@ TTL_STANDINGS = 30 * 60  # 30 minutes
 TTL_NEWS     = 15 * 60   # 15 minutes
 
 def _cache_get(key):
+    """Return cached data only if within TTL; otherwise None."""
     entry = _cache.get(key)
     if entry and time.time() < entry["expires_at"]:
         return entry["data"]
     return None
+
+def _cache_get_stale(key):
+    """Return cached data regardless of TTL (used as last-resort fallback)."""
+    entry = _cache.get(key)
+    return entry["data"] if entry else None
 
 def _cache_set(key, data, ttl):
     _cache[key] = {"data": data, "expires_at": time.time() + ttl}
 
 # ─── Venue-matching helpers ───────────────────────────────────────────────────
 
-def _norm(name):
-    """Lowercase and strip non-alpha for fuzzy team-name matching."""
-    return re.sub(r"[^a-z]", "", (name or "").lower())
+# Canonical aliases for team names that differ between football-data.org and TheSportsDB.
+# Both sides of a mismatch map to the same canonical slug.
+_TEAM_ALIASES: dict[str, str] = {
+    "usa":                          "unitedstates",
+    "unitedstatesofamerica":        "unitedstates",
+    "czechrepublic":                "czechia",
+    "ivorycoast":                   "cotedivoire",
+    "republicofireland":            "ireland",
+    "korearepublic":                "southkorea",
+    "republicofkorea":              "southkorea",
+    "dprkorea":                     "northkorea",
+    "bosniaandherzegovina":         "bosniaherzegovina",
+    "democraticrepublicofthecongo": "drcongo",
+    "congodrc":                     "drcongo",
+}
 
-def _venue_key(date, home, away):
+def _norm(name: str) -> str:
+    """
+    Normalise a team name for confident venue matching:
+      1. Unicode NFKD decomposition + ASCII transliteration (handles accented chars)
+      2. Lowercase, strip non-alpha
+      3. Apply alias table so variant names (USA/United States, etc.) share one slug
+    """
+    import unicodedata
+    slug = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode()
+    slug = re.sub(r"[^a-z]", "", slug.lower())
+    return _TEAM_ALIASES.get(slug, slug)
+
+def _venue_key(date: str, home: str, away: str) -> str:
     return f"{date}|{_norm(home)}|{_norm(away)}"
 
 # ─── Raw data fetchers (no caching, just HTTP) ────────────────────────────────
@@ -71,9 +101,16 @@ def _get_cached_raw_matches():
         print("Returning cached matches")
         return cached
     print("Refreshing matches from API")
-    raw = _raw_football_data_matches()
-    _cache_set("raw_fd_matches", raw, TTL_MATCHES)
-    return raw
+    try:
+        raw = _raw_football_data_matches()
+        _cache_set("raw_fd_matches", raw, TTL_MATCHES)
+        return raw
+    except Exception as exc:
+        stale = _cache_get_stale("raw_fd_matches")
+        if stale is not None:
+            print("API failed; returning stale cached matches as fallback")
+            return stale
+        raise exc
 
 # ─── Venue enrichment map ────────────────────────────────────────────────────
 
@@ -111,7 +148,10 @@ def _norm_group(raw_group):
 
 
 def _build_match(m, venue_map):
-    """Convert one raw football-data.org match dict to our frontend format."""
+    """
+    Convert one raw football-data.org match dict to frontend format.
+    Returns (match_dict, venue_was_enriched: bool).
+    """
     utc_date  = m.get("utcDate") or ""
     date_part = utc_date[:10] if utc_date else ""
     time_part = utc_date[11:16] if len(utc_date) >= 16 else ""
@@ -123,11 +163,17 @@ def _build_match(m, venue_map):
     home_name = home.get("name") or home.get("shortName") or ""
     away_name = away.get("name") or away.get("shortName") or ""
 
-    # Venue: prefer football-data.org; enrich from TheSportsDB when missing
+    # Primary venue from football-data.org
     venue_raw = m.get("venue") or ""
     venue = venue_raw if isinstance(venue_raw, str) else ""
+    enriched = False
+
+    # Enrichment: if fd.org has no venue, try TheSportsDB via alias-normalised key
     if not venue and home_name and away_name:
-        venue = venue_map.get(_venue_key(date_part, home_name, away_name), "")
+        sdb_venue = venue_map.get(_venue_key(date_part, home_name, away_name), "")
+        if sdb_venue:
+            venue = sdb_venue
+            enriched = True
 
     score  = m.get("score") or {}
     ft     = score.get("fullTime") or {}
@@ -137,7 +183,7 @@ def _build_match(m, venue_map):
     stage     = m.get("stage") or ""
     group_label = _norm_group(raw_group) if stage == "GROUP_STAGE" and raw_group else ""
 
-    return {
+    match_dict = {
         "date":      date_part,
         "time":      time_part,
         "homeTeam":  home_name,
@@ -155,21 +201,58 @@ def _build_match(m, venue_map):
         "matchday":  m.get("matchday"),
         "stage":     stage,
     }
+    return match_dict, enriched
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
+def _build_processed_matches():
+    """
+    Fetch, enrich with venues, and return the final match list.
+    Logs venue enrichment stats. Result is cached by the caller.
+    """
+    raw_matches = _get_cached_raw_matches()
+    venue_map   = _get_venue_map()
+
+    matches    = []
+    n_enriched = 0
+    n_tbd      = 0
+
+    for m in raw_matches:
+        match_dict, was_enriched = _build_match(m, venue_map)
+        matches.append(match_dict)
+        if was_enriched:
+            n_enriched += 1
+        elif not match_dict["venue"]:
+            n_tbd += 1
+
+    if n_enriched:
+        print(f"Enriched venue from TheSportsDB: {n_enriched} match(es)")
+    if n_tbd:
+        print(f"Venue still TBD: {n_tbd} match(es)")
+
+    return matches
+
+
 @app.route("/")
 def home():
-    # Try football-data.org (cached)
+    # Served from processed-matches cache when available
+    cached = _cache_get("matches")
+    if cached is not None:
+        print("Returning cached matches")
+        return jsonify(cached)
+
+    print("Refreshing matches from API")
     try:
-        raw_matches = _get_cached_raw_matches()
-        venue_map   = _get_venue_map()
-        matches     = [_build_match(m, venue_map) for m in raw_matches]
+        matches = _build_processed_matches()
+        _cache_set("matches", matches, TTL_MATCHES)
         return jsonify(matches)
     except Exception:
-        pass
+        stale = _cache_get_stale("matches")
+        if stale is not None:
+            print("API failed; returning stale cached matches as fallback")
+            return jsonify(stale)
 
-    # Fallback to TheSportsDB
+    # Last resort: TheSportsDB
     try:
         print("Falling back to TheSportsDB for matches")
         events  = _raw_sportsdb_events()
@@ -199,19 +282,28 @@ def news():
         return jsonify(cached)
 
     print("Refreshing news from API")
-    url = (
-        f"https://newsapi.org/v2/everything?"
-        f"q=football&language=en&pageSize=10&apiKey={NEWS_API_KEY}"
-    )
-    response = requests.get(url, timeout=10)
-    data     = response.json()
+    try:
+        url = (
+            f"https://newsapi.org/v2/everything?"
+            f"q=football&language=en&pageSize=10&apiKey={NEWS_API_KEY}"
+        )
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200:
+            raise ValueError(f"NewsAPI returned HTTP {response.status_code}")
 
-    articles = [
-        {"title": a["title"], "url": a["url"], "image": a["urlToImage"]}
-        for a in data.get("articles", [])
-    ]
-    _cache_set("news", articles, TTL_NEWS)
-    return jsonify(articles)
+        articles = [
+            {"title": a["title"], "url": a["url"], "image": a["urlToImage"]}
+            for a in response.json().get("articles", [])
+        ]
+        _cache_set("news", articles, TTL_NEWS)
+        return jsonify(articles)
+
+    except Exception as exc:
+        stale = _cache_get_stale("news")
+        if stale is not None:
+            print("API failed; returning stale cached news as fallback")
+            return jsonify(stale)
+        return jsonify({"error": str(exc)}), 502
 
 
 @app.route("/bracket")
@@ -219,20 +311,12 @@ def bracket():
     if not FOOTBALL_DATA_API_KEY:
         return jsonify({"error": "FOOTBALL_DATA_API_KEY is not set"}), 500
 
-    # Reuse the same cached raw matches — no extra API call needed
     try:
         raw_matches = _get_cached_raw_matches()
     except Exception as exc:
         return jsonify({"error": str(exc)}), 502
 
-    STAGE_ORDER = {
-        "LAST_32":        0,
-        "LAST_16":        1,
-        "QUARTER_FINALS": 2,
-        "SEMI_FINALS":    3,
-        "THIRD_PLACE":    4,
-        "FINAL":          5,
-    }
+    STAGE_KEYS   = ["LAST_32", "LAST_16", "QUARTER_FINALS", "SEMI_FINALS", "THIRD_PLACE", "FINAL"]
     STAGE_LABELS = {
         "LAST_32":        "Round of 32",
         "LAST_16":        "Round of 16",
@@ -241,66 +325,149 @@ def bracket():
         "THIRD_PLACE":    "Third Place Playoff",
         "FINAL":          "Final",
     }
+    # WC 2026: 72 group-stage + 32 knockout = 104 matches total.
+    # Display match numbers follow the sequential bracket numbering.
+    MATCH_START = {
+        "LAST_32": 73, "LAST_16": 89, "QUARTER_FINALS": 97,
+        "SEMI_FINALS": 101, "THIRD_PLACE": 103, "FINAL": 104,
+    }
 
-    # Build a group-name → ranked team list from group stage so we can
-    # generate meaningful placeholder labels for TBD slots.
-    group_teams: dict[str, list[str]] = {}   # "Group A" → ["Brazil","France",...]
+    def by_date_id(m):
+        return (m.get("utcDate") or "", m.get("id") or 0)
+
+    # Collect knockout matches, sorted per stage by date then match-id
+    raw_by_stage: dict[str, list] = {s: [] for s in STAGE_KEYS}
     for m in raw_matches:
-        if m.get("stage") != "GROUP_STAGE":
-            continue
-        raw_group = m.get("group") or ""
-        if not raw_group:
-            continue
-        glabel = _norm_group(raw_group)
-        if glabel not in group_teams:
-            group_teams[glabel] = []
-        for team_obj in (m.get("homeTeam") or {}, m.get("awayTeam") or {}):
-            name = team_obj.get("name") or team_obj.get("shortName") or ""
-            if name and name not in group_teams[glabel]:
-                group_teams[glabel].append(name)
+        s = m.get("stage") or ""
+        if s in raw_by_stage:
+            raw_by_stage[s].append(m)
 
-    stages: dict = {}
-    for m in raw_matches:
-        stage = m.get("stage") or ""
-        if stage not in STAGE_ORDER:
-            continue
+    for s in STAGE_KEYS:
+        raw_by_stage[s].sort(key=by_date_id)
 
-        utc_date  = m.get("utcDate") or ""
-        date_part = utc_date[:10] if utc_date else ""
-        time_part = utc_date[11:16] if len(utc_date) >= 16 else ""
+    r32 = raw_by_stage["LAST_32"]
+    r16 = raw_by_stage["LAST_16"]
+    qf  = raw_by_stage["QUARTER_FINALS"]
+    sf  = raw_by_stage["SEMI_FINALS"]
+    tp  = raw_by_stage["THIRD_PLACE"]
+    fn  = raw_by_stage["FINAL"]
 
-        home  = m.get("homeTeam") or {}
-        away  = m.get("awayTeam") or {}
-        score = m.get("score") or {}
-        ft    = score.get("fullTime") or {}
+    # Assign sequential display match numbers (73, 74, … 104)
+    mid_to_num: dict[int, int] = {}
+    for s in STAGE_KEYS:
+        start = MATCH_START[s]
+        for i, m in enumerate(raw_by_stage[s]):
+            mid_to_num[m["id"]] = start + i
 
-        home_name = home.get("name") or home.get("shortName") or ""
-        away_name = away.get("name") or away.get("shortName") or ""
+    def team_slot(team_obj, feeder_id=None, loser=False):
+        """
+        Return (name, label, confirmed) for one team slot:
+          name      – real team name from the API (empty when not yet determined)
+          label     – best display label: real name OR "Winner M73" / "Loser M101"
+          confirmed – True only when the API has the actual team
+        """
+        name = (team_obj or {}).get("name") or (team_obj or {}).get("shortName") or ""
+        badge = (team_obj or {}).get("crest") or ""
+        if name:
+            return name, name, badge, True
+        if feeder_id is not None:
+            num = mid_to_num.get(feeder_id, "?")
+            prefix = "Loser" if loser else "Winner"
+            return "", f"{prefix} M{num}", "", False
+        return "", "", "", False
 
-        # If the API gives us placeholder strings (some editions do), use them.
-        # Otherwise leave empty and the frontend will show "TBD".
-        home_label = home_name
-        away_label = away_name
+    def build_matches(raw_list, home_feeders=None, away_feeders=None,
+                      home_loser=False, away_loser=False):
+        n = len(raw_list)
+        home_feeders = home_feeders or [None] * n
+        away_feeders = away_feeders or [None] * n
+        result = []
+        for i, m in enumerate(raw_list):
+            utc_date = m.get("utcDate") or ""
+            score    = m.get("score") or {}
+            ft       = score.get("fullTime") or {}
 
-        stages.setdefault(stage, []).append({
-            "date":       date_part,
-            "time":       time_part,
-            "homeTeam":   home_label,
-            "awayTeam":   away_label,
-            "homeBadge":  home.get("crest") or "",
-            "awayBadge":  away.get("crest") or "",
-            "homeScore":  ft.get("home"),
-            "awayScore":  ft.get("away"),
-            "status":     m.get("status") or "",
-            "matchday":   m.get("matchday"),
-        })
+            h_name, h_label, h_badge, h_ok = team_slot(
+                m.get("homeTeam"), home_feeders[i], home_loser)
+            a_name, a_label, a_badge, a_ok = team_slot(
+                m.get("awayTeam"), away_feeders[i], away_loser)
+
+            result.append({
+                "matchNum":      mid_to_num.get(m.get("id")),
+                "date":          utc_date[:10] if utc_date else "",
+                "time":          utc_date[11:16] if len(utc_date) >= 16 else "",
+                "homeTeam":      h_name,
+                "awayTeam":      a_name,
+                "homeLabel":     h_label,
+                "awayLabel":     a_label,
+                "homeConfirmed": h_ok,
+                "awayConfirmed": a_ok,
+                "homeBadge":     h_badge,
+                "awayBadge":     a_badge,
+                "homeScore":     ft.get("home"),
+                "awayScore":     ft.get("away"),
+                "status":        m.get("status") or "",
+            })
+        return result
+
+    def ids(lst, indices):
+        return [lst[i]["id"] if i < len(lst) else None for i in indices]
+
+    # ── Round of 32 ──────────────────────────────────────────────────────────
+    r32_built = build_matches(r32)  # feeders = group-stage results (unknown)
+
+    # ── Round of 16 ─── each R16 match fed by two adjacent R32 matches ───────
+    r16_built = build_matches(
+        r16,
+        home_feeders=ids(r32, [2*i   for i in range(len(r16))]),
+        away_feeders=ids(r32, [2*i+1 for i in range(len(r16))]),
+    )
+
+    # ── Quarter Finals ────────────────────────────────────────────────────────
+    qf_built = build_matches(
+        qf,
+        home_feeders=ids(r16, [2*i   for i in range(len(qf))]),
+        away_feeders=ids(r16, [2*i+1 for i in range(len(qf))]),
+    )
+
+    # ── Semi Finals ───────────────────────────────────────────────────────────
+    sf_built = build_matches(
+        sf,
+        home_feeders=ids(qf, [2*i   for i in range(len(sf))]),
+        away_feeders=ids(qf, [2*i+1 for i in range(len(sf))]),
+    )
+
+    # ── Third Place Playoff ── losers of both SF matches ─────────────────────
+    sf_ids = [m["id"] for m in sf]
+    tp_built = build_matches(
+        tp,
+        home_feeders=[sf_ids[0] if sf_ids else None] * len(tp),
+        away_feeders=[sf_ids[1] if len(sf_ids) > 1 else None] * len(tp),
+        home_loser=True, away_loser=True,
+    )
+
+    # ── Final ── winners of both SF matches ───────────────────────────────────
+    fn_built = build_matches(
+        fn,
+        home_feeders=[sf_ids[0] if sf_ids else None] * len(fn),
+        away_feeders=[sf_ids[1] if len(sf_ids) > 1 else None] * len(fn),
+    )
+
+    built_map = {
+        "LAST_32": r32_built, "LAST_16": r16_built,
+        "QUARTER_FINALS": qf_built, "SEMI_FINALS": sf_built,
+        "THIRD_PLACE": tp_built, "FINAL": fn_built,
+    }
 
     result = []
-    for key in sorted(stages, key=lambda s: STAGE_ORDER[s]):
+    for key in STAGE_KEYS:
+        matches = built_map[key]
+        if not matches:
+            continue
         result.append({
-            "stage":      STAGE_LABELS[key],
-            "stageKey":   key,
-            "matches":    sorted(stages[key], key=lambda x: (x["date"] or "", x["matchday"] or 0)),
+            "stage":    STAGE_LABELS[key],
+            "stageKey": key,
+            "matches":  matches,
         })
 
     return jsonify(result)
@@ -317,43 +484,51 @@ def standings():
         return jsonify(cached)
 
     print("Refreshing standings from API")
-    headers = {"X-Auth-Token": FOOTBALL_DATA_API_KEY}
-    resp = requests.get(
-        "https://api.football-data.org/v4/competitions/WC/standings",
-        headers=headers,
-        timeout=10,
-    )
-    if resp.status_code != 200:
-        return jsonify({"error": f"football-data.org returned HTTP {resp.status_code}"}), 502
+    try:
+        headers = {"X-Auth-Token": FOOTBALL_DATA_API_KEY}
+        resp = requests.get(
+            "https://api.football-data.org/v4/competitions/WC/standings",
+            headers=headers,
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            raise ValueError(f"football-data.org returned HTTP {resp.status_code}")
 
-    raw = resp.json().get("standings", [])
+        raw = resp.json().get("standings", [])
 
-    groups = []
-    for entry in raw:
-        if entry.get("type") != "TOTAL":
-            continue
+        groups = []
+        for entry in raw:
+            if entry.get("type") != "TOTAL":
+                continue
 
-        raw_group = entry.get("group") or ""
-        label = _norm_group(raw_group) if raw_group else "Group"
+            raw_group = entry.get("group") or ""
+            label = _norm_group(raw_group) if raw_group else "Group"
 
-        table = []
-        for row in entry.get("table", []):
-            team = row.get("team") or {}
-            table.append({
-                "position": row.get("position", 0),
-                "team":     team.get("name") or team.get("shortName") or "Unknown",
-                "crest":    team.get("crest") or "",
-                "played":   row.get("playedGames", 0),
-                "won":      row.get("won", 0),
-                "drawn":    row.get("draw", 0),
-                "lost":     row.get("lost", 0),
-                "points":   row.get("points", 0),
-            })
+            table = []
+            for row in entry.get("table", []):
+                team = row.get("team") or {}
+                table.append({
+                    "position": row.get("position", 0),
+                    "team":     team.get("name") or team.get("shortName") or "Unknown",
+                    "crest":    team.get("crest") or "",
+                    "played":   row.get("playedGames", 0),
+                    "won":      row.get("won", 0),
+                    "drawn":    row.get("draw", 0),
+                    "lost":     row.get("lost", 0),
+                    "points":   row.get("points", 0),
+                })
 
-        groups.append({"group": label, "table": table})
+            groups.append({"group": label, "table": table})
 
-    _cache_set("standings", groups, TTL_STANDINGS)
-    return jsonify(groups)
+        _cache_set("standings", groups, TTL_STANDINGS)
+        return jsonify(groups)
+
+    except Exception as exc:
+        stale = _cache_get_stale("standings")
+        if stale is not None:
+            print("API failed; returning stale cached standings as fallback")
+            return jsonify(stale)
+        return jsonify({"error": str(exc)}), 502
 
 
 @app.route("/players/<team_id>")
