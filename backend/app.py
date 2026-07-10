@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 import os
 import re
@@ -209,9 +210,17 @@ def _build_processed_matches():
     """
     Fetch, enrich with venues, and return the final match list.
     Logs venue enrichment stats. Result is cached by the caller.
+
+    Both external API calls (_get_cached_raw_matches and _get_venue_map) are
+    submitted concurrently so the total cold-start wait is max(t_fd, t_sdb)
+    instead of t_fd + t_sdb.  Cache hits on either call are still instant.
     """
-    raw_matches = _get_cached_raw_matches()
-    venue_map   = _get_venue_map()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut_matches = pool.submit(_get_cached_raw_matches)
+        fut_venues  = pool.submit(_get_venue_map)
+        # Raise immediately if either call failed
+        raw_matches = fut_matches.result()
+        venue_map   = fut_venues.result()
 
     matches    = []
     n_enriched = 0
