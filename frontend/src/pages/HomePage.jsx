@@ -3,17 +3,28 @@ import { formatLocalDateTime, downloadICS } from "../utils";
 
 const MATCHES_PER_PAGE = 10;
 
-const FAVORITES = [
-  { team: "Spain",       pct: 17.3 },
-  { team: "France",      pct: 15.1 },
-  { team: "England",     pct: 12.8 },
-  { team: "Argentina",   pct:  9.7 },
-  { team: "Brazil",      pct:  7.8 },
-  { team: "Portugal",    pct:  5.6 },
-  { team: "Germany",     pct:  4.3 },
-  { team: "Netherlands", pct:  3.2 },
-  { team: "Belgium",     pct:  2.5 },
-  { team: "Croatia",     pct:  1.7 },
+const AWARDS = [
+  {
+    portrait: "/images/rodri.jpg",
+    icon: "🏅",
+    award: "Golden Ball",
+    winner: "Rodri",
+    subtitle: "Best Player of the Tournament",
+  },
+  {
+    portrait: "/images/unai-simon.jpg",
+    icon: "🧤",
+    award: "Golden Glove",
+    winner: "Unai Simón",
+    subtitle: "Best Goalkeeper",
+  },
+  {
+    portrait: "/images/pau-cubarsi.jpg",
+    icon: "⭐",
+    award: "Best Young Player",
+    winner: "Pau Cubarsí",
+    subtitle: "Best Under-21 Player",
+  },
 ];
 
 export default function HomePage({ matches, news, loadingMatches, loadingNews }) {
@@ -40,23 +51,50 @@ export default function HomePage({ matches, news, loadingMatches, loadingNews })
 
   return (
     <>
-      {/* ── Tournament Favorites ── */}
-      <div className="favorites-card">
-        <p className="favorites-title">🏆 Favorites to Win World Cup 2026</p>
-        {FAVORITES.map(({ team, pct }) => (
-          <div key={team} className="fav-row">
-            <div className="fav-label">
-              <span>{team}</span>
-              <span>{pct}%</span>
-            </div>
-            <div className="fav-bar-track">
-              <div className="fav-bar-fill" style={{ width: `${(pct / 17.3) * 100}%` }} />
-            </div>
+      {/* ── Championship Hero ── */}
+      <div className="champ-hero">
+        <img
+          src="/images/spain-hero.jpg"
+          alt="Spain celebrating the 2026 FIFA World Cup trophy"
+          className="champ-hero-img"
+          loading="lazy"
+          onError={(e) => { e.currentTarget.style.display = "none"; }}
+        />
+        <div className="champ-trophy">🏆</div>
+        <div className="champ-body">
+          <p className="champ-eyebrow">2026 FIFA World Cup Champions</p>
+          <h2 className="champ-title">🇪🇸 Spain</h2>
+          <p className="champ-result">Final · Spain <strong>1 – 0</strong> Argentina</p>
+          <p className="champ-subtitle">
+            Spain claimed its second World Cup title after defeating Argentina in the final.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Tournament Awards ── */}
+      <h3 className="awards-heading">🎖️ 2026 World Cup Awards</h3>
+      <div className="awards-grid">
+        {AWARDS.map(({ portrait, icon, award, winner, subtitle }) => (
+          <div key={award} className="award-card">
+            <img
+              src={portrait}
+              alt={`${winner} — ${award}`}
+              className="award-portrait"
+              loading="lazy"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+                // reveal fallback emoji when image is missing
+                const fb = e.currentTarget.nextSibling;
+                if (fb) fb.style.display = "block";
+              }}
+            />
+            {/* fallback emoji shown only when image fails to load */}
+            <div className="award-icon-fallback" style={{ display: "none" }}>{icon}</div>
+            <p className="award-label">{icon} {award}</p>
+            <p className="award-winner">{winner}</p>
+            <p className="award-subtitle">{subtitle}</p>
           </div>
         ))}
-        <p className="favorites-note">
-          Probabilities are illustrative and based on publicly circulated estimates, not live betting odds.
-        </p>
       </div>
 
       {/* ── Match Search + List ── */}

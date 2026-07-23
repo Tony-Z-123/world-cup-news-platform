@@ -100,22 +100,129 @@ export default function App() {
           }
           .page-btn:disabled { background: #f5f5f5; color: #aaa; cursor: not-allowed; }
 
-          /* ── Favorites ── */
-          .favorites-card {
-            background: #fff;
-            border-radius: 15px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-            padding: 22px 26px 18px;
-            margin-bottom: 36px;
+          /* ── Championship Hero ── */
+          .champ-hero {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            background: linear-gradient(135deg, #c8960c 0%, #f5c518 40%, #e8a800 100%);
+            border-radius: 18px;
+            box-shadow: 0 6px 24px rgba(200,150,12,0.35);
+            padding: 28px 30px;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+            overflow: hidden;
           }
-          .favorites-title { font-size: 16px; font-weight: 700; color: #1a3c6b; margin: 0 0 18px; }
-          .fav-row { margin-bottom: 13px; }
-          .fav-row:last-of-type { margin-bottom: 0; }
-          .fav-label { display: flex; justify-content: space-between; font-size: 14px; color: #333; margin-bottom: 5px; }
-          .fav-label span:last-child { font-weight: 700; color: #1a6b3a; }
-          .fav-bar-track { background: #f0f0f0; border-radius: 999px; height: 10px; overflow: hidden; }
-          .fav-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #1a6b3a, #34a85a); }
-          .favorites-note { margin-top: 14px; font-size: 11px; color: #aaa; text-align: right; }
+          .champ-hero-img {
+            width: 220px;
+            height: 160px;
+            object-fit: cover;
+            border-radius: 12px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.30);
+            flex-shrink: 0;
+            order: -1;
+          }
+          @media (max-width: 620px) {
+            .champ-hero-img {
+              width: 100%;
+              height: 200px;
+              order: 0;
+            }
+          }
+          .champ-trophy {
+            font-size: 64px;
+            line-height: 1;
+            flex-shrink: 0;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.18));
+          }
+          .champ-body { flex: 1; min-width: 200px; }
+          .champ-eyebrow {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.85);
+            margin: 0 0 6px;
+          }
+          .champ-title {
+            font-size: 28px;
+            font-weight: 900;
+            color: #fff;
+            margin: 0 0 8px;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.18);
+          }
+          .champ-result {
+            font-size: 15px;
+            color: rgba(255,255,255,0.92);
+            margin: 0 0 8px;
+            letter-spacing: 0.3px;
+          }
+          .champ-result strong { font-size: 18px; color: #fff; }
+          .champ-subtitle {
+            font-size: 13px;
+            color: rgba(255,255,255,0.82);
+            margin: 0;
+            line-height: 1.5;
+          }
+
+          /* ── Awards ── */
+          .awards-heading {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1a3c6b;
+            margin: 0 0 16px;
+          }
+          .awards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 36px;
+            align-items: stretch;
+          }
+          .award-card {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            padding: 22px 18px 18px;
+            text-align: center;
+            border-top: 3px solid #f5c518;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+          }
+          /* Circular portrait */
+          .award-portrait {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            object-fit: cover;
+            object-position: top center;
+            border: 3px solid #f5c518;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.15);
+            margin-bottom: 14px;
+            flex-shrink: 0;
+          }
+          /* Emoji shown only when portrait image fails */
+          .award-icon-fallback { font-size: 34px; margin-bottom: 10px; }
+          .award-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #c8960c;
+            margin: 0 0 6px;
+          }
+          .award-winner {
+            font-size: 17px;
+            font-weight: 800;
+            color: #1a3c6b;
+            margin: 0 0 4px;
+          }
+          .award-subtitle {
+            font-size: 12px;
+            color: #888;
+            margin: 0;
+          }
 
           /* ── Standings ── */
           .standings-grid {
