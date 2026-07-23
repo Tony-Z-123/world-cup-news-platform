@@ -5,13 +5,16 @@ const MATCHES_PER_PAGE = 10;
 
 const AWARDS = [
   {
-    portrait: "/images/rodri.jpg",
+    // Wikimedia Commons — CC-BY-SA — Rodri vs Sweden, Oct 2019 (cropped)
+    portrait:
+      "https://upload.wikimedia.org/wikipedia/commons/8/84/RODRI_-_SWE_vs_ESP_-_UEFA_EURO_2020_QUALIFIERS_-_2019.10.15_%28cropped%29.jpg",
     icon: "🏅",
     award: "Golden Ball",
     winner: "Rodri",
     subtitle: "Best Player of the Tournament",
   },
   {
+    // Local file — downloaded from Wikimedia Commons (CC-BY-SA)
     portrait: "/images/unai-simon.jpg",
     icon: "🧤",
     award: "Golden Glove",
@@ -19,7 +22,9 @@ const AWARDS = [
     subtitle: "Best Goalkeeper",
   },
   {
-    portrait: "/images/pau-cubarsi.jpg",
+    // Wikimedia Commons — CC-BY-SA — Pau Cubarsí portrait (cropped)
+    portrait:
+      "https://upload.wikimedia.org/wikipedia/commons/1/1d/Pau_Cubars%C3%AD_%28cropped%29.jpg",
     icon: "⭐",
     award: "Best Young Player",
     winner: "Pau Cubarsí",
@@ -54,7 +59,7 @@ export default function HomePage({ matches, news, loadingMatches, loadingNews })
       {/* ── Championship Hero ── */}
       <div className="champ-hero">
         <img
-          src="/images/spain-hero.jpg"
+          src="/images/spain-hero.png"
           alt="Spain celebrating the 2026 FIFA World Cup trophy"
           className="champ-hero-img"
           loading="lazy"
