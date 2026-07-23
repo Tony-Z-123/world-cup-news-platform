@@ -5,16 +5,13 @@ const MATCHES_PER_PAGE = 10;
 
 const AWARDS = [
   {
-    // Wikimedia Commons — CC-BY-SA — Rodri vs Sweden, Oct 2019 (cropped)
-    portrait:
-      "https://upload.wikimedia.org/wikipedia/commons/8/84/RODRI_-_SWE_vs_ESP_-_UEFA_EURO_2020_QUALIFIERS_-_2019.10.15_%28cropped%29.jpg",
+    portrait: "/images/rodri.png",
     icon: "🏅",
     award: "Golden Ball",
     winner: "Rodri",
     subtitle: "Best Player of the Tournament",
   },
   {
-    // Local file — downloaded from Wikimedia Commons (CC-BY-SA)
     portrait: "/images/unai-simon.jpg",
     icon: "🧤",
     award: "Golden Glove",
@@ -22,9 +19,7 @@ const AWARDS = [
     subtitle: "Best Goalkeeper",
   },
   {
-    // Wikimedia Commons — CC-BY-SA — Pau Cubarsí portrait (cropped)
-    portrait:
-      "https://upload.wikimedia.org/wikipedia/commons/1/1d/Pau_Cubars%C3%AD_%28cropped%29.jpg",
+    portrait: "/images/pau-cubarsi.png",
     icon: "⭐",
     award: "Best Young Player",
     winner: "Pau Cubarsí",
